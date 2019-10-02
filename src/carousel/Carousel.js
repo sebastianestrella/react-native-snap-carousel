@@ -1142,6 +1142,17 @@ export default class Carousel extends Component {
         this._snapToItem(newIndex, animated, fireCallback);
     }
 
+    updateCurrentIndex (index) {
+        console.log('>>>> updateCurrentIndex =================');
+        console.log('>>>> index: ', index);
+        console.log('>>>> this._activeItem: ', this._activeItem);
+        if (!index || index < 0) {
+            this._activeItem = 0;
+        } else {
+            this._activeItem = index;
+        }
+    }
+
     // https://github.com/facebook/react-native/issues/1831#issuecomment-231069668
     triggerRenderingHack (offset) {
         // Avoid messing with user scroll
