@@ -1145,12 +1145,21 @@ export default class Carousel extends Component {
     updateCurrentIndex (index) {
         console.log('>>>> updateCurrentIndex =================');
         console.log('>>>> index: ', index);
-        console.log('>>>> this._activeItem: ', this._activeItem);
+        console.log('>>>> (before) this._activeItem: ', this._activeItem);
+        console.log('>>>> (before) this._previousActiveItem: ', this._previousActiveItem);
+        console.log('>>>> (before) this._itemToSnapTo: ', this._itemToSnapTo);
         if (!index || index < 0) {
             this._activeItem = 0;
+            this._previousActiveItem = 0;
+            this._itemToSnapTo = 0;
         } else {
+            this._previousActiveItem = index;
+            this._itemToSnapTo = index;
             this._activeItem = index;
         }
+        console.log('>>>> (after) this._activeItem: ', this._activeItem);
+        console.log('>>>> (after) this._previousActiveItem: ', this._previousActiveItem);
+        console.log('>>>> (after) this._itemToSnapTo: ', this._itemToSnapTo);
     }
 
     // https://github.com/facebook/react-native/issues/1831#issuecomment-231069668
