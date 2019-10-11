@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import { Animated, Easing, FlatList, I18nManager, Platform, ScrollView, View, ViewPropTypes } from 'react-native';
 import PropTypes from 'prop-types';
+import { RecyclerListView } from 'recyclerlistview';
 import shallowCompare from 'react-addons-shallow-compare';
 import {
     defaultScrollInterpolator,
@@ -16,7 +17,8 @@ const IS_IOS = Platform.OS === 'ios';
 
 // Native driver for scroll events
 // See: https://facebook.github.io/react-native/blog/2017/02/14/using-native-driver-for-animated.html
-const AnimatedFlatList = FlatList ? Animated.createAnimatedComponent(FlatList) : null;
+// const AnimatedFlatList = FlatList ? Animated.createAnimatedComponent(FlatList) : null;
+const AnimatedRecycler = RecyclerListView ? Animated.createAnimatedComponent(RecyclerListView) : null;
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 // React Native automatically handles RTL layouts; unfortunately, it's buggy with horizontal ScrollView
@@ -28,8 +30,9 @@ const IS_RTL = I18nManager.isRTL;
 export default class Carousel extends Component {
 
     static propTypes = {
-        data: PropTypes.array.isRequired,
-        renderItem: PropTypes.func.isRequired,
+        dataProvider: PropTypes.object.isRequired,
+        layoutProvider: PropTypes.object.isRequired,
+        rowRenderer: PropTypes.func.isRequired,
         itemWidth: PropTypes.number, // required for horizontal carousel
         itemHeight: PropTypes.number, // required for vertical carousel
         sliderWidth: PropTypes.number, // required for horizontal carousel
@@ -98,7 +101,7 @@ export default class Carousel extends Component {
         slideStyle: {},
         shouldOptimizeUpdates: true,
         swipeThreshold: 20,
-        useScrollView: !AnimatedFlatList,
+        useScrollView: !AnimatedRecycler,
         vertical: false
     }
 
@@ -129,7 +132,6 @@ export default class Carousel extends Component {
         this._scrollEnabled = props.scrollEnabled !== false;
 
         this._initPositionsAndInterpolators = this._initPositionsAndInterpolators.bind(this);
-        this._renderItem = this._renderItem.bind(this);
         this._onSnap = this._onSnap.bind(this);
 
         this._onLayout = this._onLayout.bind(this);
@@ -323,7 +325,7 @@ export default class Carousel extends Component {
 
     _needsScrollView () {
         const { useScrollView } = this.props;
-        return useScrollView || !AnimatedFlatList || this._shouldUseStackLayout() || this._shouldUseTinderLayout();
+        return useScrollView || !AnimatedRecycler || this._shouldUseStackLayout() || this._shouldUseTinderLayout();
     }
 
     _needsRTLAdaptations () {
@@ -337,8 +339,8 @@ export default class Carousel extends Component {
     }
 
     _enableLoop () {
-        const { data, enableSnap, loop } = this.props;
-        return enableSnap && loop && data && data.length && data.length > 1;
+        const { dataProvider, enableSnap, loop } = this.props;
+        return enableSnap && loop && dataProvider && dataProvider.getAllData() && dataProvider.getAllData().length > 1;
     }
 
     _shouldAnimateSlides (props = this.props) {
@@ -371,12 +373,14 @@ export default class Carousel extends Component {
     }
 
     _getCustomData (props = this.props) {
-        const { data, loopClonesPerSide } = props;
-        const dataLength = data && data.length;
+        const { dataProvider, loopClonesPerSide } = props;
+        const dataLength = dataProvider && dataProvider.getAllData().length;
 
         if (!dataLength) {
             return [];
         }
+
+        const data = dataProvider.getAllData();
 
         if (!this._enableLoop()) {
             return data;
@@ -405,8 +409,8 @@ export default class Carousel extends Component {
     }
 
     _getCustomDataLength (props = this.props) {
-        const { data, loopClonesPerSide } = props;
-        const dataLength = data && data.length;
+        const { dataProvider, loopClonesPerSide } = props;
+        const dataLength = dataProvider && dataProvider.getAllData().length;
 
         if (!dataLength) {
             return 0;
@@ -426,8 +430,8 @@ export default class Carousel extends Component {
     }
 
     _getDataIndex (index) {
-        const { data, loopClonesPerSide } = this.props;
-        const dataLength = data && data.length;
+        const { dataProvider, loopClonesPerSide } = this.props;
+        const dataLength = dataProvider && dataProvider.getAllData().length;
 
         if (!this._enableLoop() || !dataLength) {
             return index;
@@ -566,10 +570,10 @@ export default class Carousel extends Component {
     }
 
     _initPositionsAndInterpolators (props = this.props) {
-        const { data, itemWidth, itemHeight, scrollInterpolator, vertical } = props;
+        const { dataProvider, itemWidth, itemHeight, scrollInterpolator, vertical } = props;
         const sizeRef = vertical ? itemHeight : itemWidth;
 
-        if (!data || !data.length) {
+        if (!dataProvider || !dataProvider.getAllData().length) {
             return;
         }
 
@@ -676,7 +680,7 @@ export default class Carousel extends Component {
     }
 
     _hackActiveSlideAnimation (index, goTo, force = false) {
-        const { data } = this.props;
+        const { dataProvider } = this.props;
 
         if (!this._mounted || !this._carouselRef || !this._positions[index] || (!force && this._enableLoop())) {
             return;
@@ -688,7 +692,7 @@ export default class Carousel extends Component {
             return;
         }
 
-        const itemsLength = data && data.length;
+        const itemsLength = dataProvider && dataProvider.getAllData().length;
         const direction = goTo || itemsLength === 1 ? 'start' : 'end';
 
         this._scrollTo(offset + (direction === 'start' ? -1 : 1), false);
@@ -714,8 +718,8 @@ export default class Carousel extends Component {
     }
 
     _repositionScroll (index) {
-        const { data, loopClonesPerSide } = this.props;
-        const dataLength = data && data.length;
+        const { dataProvider, loopClonesPerSide } = this.props;
+        const dataLength = dataProvider && dataProvider.getAllData().length;
 
         if (!this._enableLoop() || !dataLength ||
             (index >= loopClonesPerSide && index < dataLength + loopClonesPerSide)) {
@@ -1142,26 +1146,6 @@ export default class Carousel extends Component {
         this._snapToItem(newIndex, animated, fireCallback);
     }
 
-    updateCurrentIndex (index) {
-        console.log('>>>> updateCurrentIndex =================');
-        console.log('>>>> index: ', index);
-        console.log('>>>> (before) this._activeItem: ', this._activeItem);
-        console.log('>>>> (before) this._previousActiveItem: ', this._previousActiveItem);
-        console.log('>>>> (before) this._itemToSnapTo: ', this._itemToSnapTo);
-        if (!index || index < 0) {
-            this._activeItem = 0;
-            this._previousActiveItem = 0;
-            this._itemToSnapTo = 0;
-        } else {
-            this._previousActiveItem = index;
-            this._itemToSnapTo = index;
-            this._activeItem = index;
-        }
-        console.log('>>>> (after) this._activeItem: ', this._activeItem);
-        console.log('>>>> (after) this._previousActiveItem: ', this._previousActiveItem);
-        console.log('>>>> (after) this._itemToSnapTo: ', this._itemToSnapTo);
-    }
-
     // https://github.com/facebook/react-native/issues/1831#issuecomment-231069668
     triggerRenderingHack (offset) {
         // Avoid messing with user scroll
@@ -1192,52 +1176,6 @@ export default class Carousel extends Component {
         } else {
             return defaultAnimatedStyles(index, animatedValue, this.props);
         }
-    }
-
-    _renderItem ({ item, index }) {
-        const { interpolators } = this.state;
-        const {
-            hasParallaxImages,
-            itemWidth,
-            itemHeight,
-            keyExtractor,
-            renderItem,
-            sliderHeight,
-            sliderWidth,
-            slideStyle,
-            vertical
-        } = this.props;
-
-        const animatedValue = interpolators && interpolators[index];
-
-        if (!animatedValue && animatedValue !== 0) {
-            return null;
-        }
-
-        const animate = this._shouldAnimateSlides();
-        const Component = animate ? Animated.View : View;
-        const animatedStyle = animate ? this._getSlideInterpolatedStyle(index, animatedValue) : {};
-
-        const parallaxProps = hasParallaxImages ? {
-            scrollPosition: this._scrollPos,
-            carouselRef: this._carouselRef,
-            vertical,
-            sliderWidth,
-            sliderHeight,
-            itemWidth,
-            itemHeight
-        } : undefined;
-
-        const mainDimension = vertical ? { height: itemHeight } : { width: itemWidth };
-        const specificProps = this._needsScrollView() ? {
-            key: keyExtractor ? keyExtractor(item, index) : this._getKeyExtractor(item, index)
-        } : {};
-
-        return (
-            <Component style={[mainDimension, slideStyle, animatedStyle]} pointerEvents={'box-none'} {...specificProps}>
-                { renderItem({ item, index }, parallaxProps) }
-            </Component>
-        );
     }
 
     _getComponentOverridableProps () {
@@ -1314,14 +1252,13 @@ export default class Carousel extends Component {
             contentContainerCustomStyle || {}
         ];
 
-        const specificProps = !this._needsScrollView() ? {
+        /* const specificProps = !this._needsScrollView() ? {
             // extraData: this.state,
             renderItem: this._renderItem,
             numColumns: 1,
             getItemLayout: undefined, // see #193
-            initialScrollIndex: undefined, // see #193
             keyExtractor: keyExtractor || this._getKeyExtractor
-        } : {};
+        } : {}; */
 
         return {
             ref: c => this._carouselRef = c,
@@ -1339,14 +1276,12 @@ export default class Carousel extends Component {
             onTouchStart: this._onTouchStart,
             onTouchEnd: this._onScrollEnd,
             onLayout: this._onLayout,
-            ...specificProps
         };
     }
 
     render () {
-        const { data, renderItem, useScrollView } = this.props;
-
-        if (!data || !renderItem) {
+        const { dataProvider, layoutProvider, rowRenderer } = this.props;
+        if (!dataProvider || !layoutProvider || !rowRenderer) {
             return null;
         }
 
@@ -1356,18 +1291,11 @@ export default class Carousel extends Component {
             ...this._getComponentStaticProps()
         };
 
-        const ScrollViewComponent = typeof useScrollView === 'function' ? useScrollView : AnimatedScrollView
-
-        return this._needsScrollView() ? (
-            <ScrollViewComponent {...props}>
-                {
-                    this._getCustomData().map((item, index) => {
-                        return this._renderItem({ item, index });
-                    })
-                }
-            </ScrollViewComponent>
-        ) : (
-            <AnimatedFlatList {...props} />
+        return (
+            <AnimatedRecycler
+                {...props}
+                scrollViewProps={props}
+            />
         );
     }
 }
