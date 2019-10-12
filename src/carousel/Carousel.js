@@ -572,14 +572,12 @@ export default class Carousel extends Component {
     _initPositionsAndInterpolators (props = this.props) {
         const { dataProvider, itemWidth, itemHeight, scrollInterpolator, vertical } = props;
         const sizeRef = vertical ? itemHeight : itemWidth;
-
         if (!dataProvider || !dataProvider.getAllData().length) {
             return;
         }
 
         let interpolators = [];
         this._positions = [];
-
         this._getCustomData(props).forEach((itemData, index) => {
             const _index = this._getCustomIndex(index, props);
             let animatedValue;
@@ -616,7 +614,6 @@ export default class Carousel extends Component {
 
             interpolators.push(animatedValue);
         });
-
         this.setState({ interpolators });
     }
 
@@ -695,11 +692,13 @@ export default class Carousel extends Component {
         const itemsLength = dataProvider && dataProvider.getAllData().length;
         const direction = goTo || itemsLength === 1 ? 'start' : 'end';
 
-        this._scrollTo(offset + (direction === 'start' ? -1 : 1), false);
+        console.log('>>>> _hackActiveSlideAnimation...');
+
+        this._scrollTo(offset + (direction === 'start' ? -1 : 1), true);
 
         clearTimeout(this._hackSlideAnimationTimeout);
         this._hackSlideAnimationTimeout = setTimeout(() => {
-            this._scrollTo(offset, false);
+            this._scrollTo(offset, true);
         }, 50); // works randomly when set to '0'
     }
 
@@ -740,7 +739,6 @@ export default class Carousel extends Component {
     _scrollTo (offset, animated = true) {
         const { vertical } = this.props;
         const wrappedRef = this._getWrappedRef();
-
         if (!this._mounted || !wrappedRef) {
             return;
         }
@@ -755,6 +753,8 @@ export default class Carousel extends Component {
             ...specificOptions,
             animated
         };
+
+        console.log('>>>> options: ', options);
 
         if (this._needsScrollView()) {
             wrappedRef.scrollTo(options);
@@ -1159,7 +1159,36 @@ export default class Carousel extends Component {
         }
 
         const scrollOffset = offset || (scrollPosition === 0 ? 1 : -1);
-        this._scrollTo(scrollPosition + scrollOffset, false);
+        console.log('>>>> hack...');
+        this._scrollTo(scrollPosition + scrollOffset, true);
+    }
+
+    _renderItem = (type, item, index) => {
+        const { interpolators } = this.state;
+        const {
+            itemWidth,
+            itemHeight,
+            rowRenderer,
+            slideStyle,
+            vertical
+        } = this.props;
+
+        const animatedValue = interpolators && interpolators[index];
+        if (!animatedValue && animatedValue !== 0) {
+            return null;
+        }
+
+        const animate = this._shouldAnimateSlides();
+        const Component = animate ? Animated.View : View;
+        const animatedStyle = animate ? this._getSlideInterpolatedStyle(index, animatedValue) : {};
+
+        const mainDimension = vertical ? { height: itemHeight } : { width: itemWidth };
+
+        return (
+            <Component style={[mainDimension, slideStyle]} pointerEvents={'box-only'}>
+                { rowRenderer(index, item, animatedStyle) }
+            </Component>
+        );
     }
 
     _getSlideInterpolatedStyle (index, animatedValue) {
@@ -1213,7 +1242,6 @@ export default class Carousel extends Component {
             directionalLockEnabled: true,
             pinchGestureEnabled: false,
             scrollsToTop: false,
-            removeClippedSubviews: !this._needsScrollView(),
             inverted: this._needsRTLAdaptations(),
             // renderToHardwareTextureAndroid: true,
             ...specificProps
@@ -1252,20 +1280,18 @@ export default class Carousel extends Component {
             contentContainerCustomStyle || {}
         ];
 
-        /* const specificProps = !this._needsScrollView() ? {
+        const specificProps = !this._needsScrollView() ? {
             // extraData: this.state,
-            renderItem: this._renderItem,
+            rowRenderer: this._renderItem,
             numColumns: 1,
             getItemLayout: undefined, // see #193
             keyExtractor: keyExtractor || this._getKeyExtractor
-        } : {}; */
+        } : {};
 
         return {
             ref: c => this._carouselRef = c,
-            data: this._getCustomData(),
             style: containerStyle,
             contentContainerStyle: contentContainerStyle,
-            horizontal: !vertical,
             scrollEventThrottle: 1,
             onScroll: this._onScrollHandler,
             onScrollBeginDrag: this._onScrollBeginDrag,
@@ -1276,6 +1302,7 @@ export default class Carousel extends Component {
             onTouchStart: this._onTouchStart,
             onTouchEnd: this._onScrollEnd,
             onLayout: this._onLayout,
+            ...specificProps,
         };
     }
 
